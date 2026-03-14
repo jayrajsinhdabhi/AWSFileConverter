@@ -1,0 +1,118 @@
+:root {
+  --bg-start: #f4efe3;
+  --bg-end: #dbe8f0;
+  --card: #fffdf8;
+  --text: #202225;
+  --muted: #60656b;
+  --accent: #0e7490;
+  --accent-hover: #155e75;
+  --line: #d9dee3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top right, #f7d9b6 0%, transparent 38%),
+    linear-gradient(135deg, var(--bg-start), var(--bg-end));
+  min-height: 100vh;
+}
+
+.container {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.card {
+  width: min(640px, 100%);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.9rem;
+}
+
+.subtitle {
+  margin: 0.5rem 0 1.25rem;
+  color: var(--muted);
+}
+
+.form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+label {
+  font-weight: 600;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font: inherit;
+}
+
+button {
+  margin-top: 0.35rem;
+  border: none;
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+button:hover,
+button:focus-visible {
+  background: var(--accent-hover);
+}
+
+.download-area {
+  margin-top: 1.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.download-area h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.download-area p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.download-link {
+  color: #0c4a6e;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+@media (max-width: 560px) {
+  .card {
+    padding: 1.1rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+}

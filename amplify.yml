@@ -1,13 +1,15 @@
 version: 1
-frontend:
-  phases:
-    preBuild:
-      commands: []
-    build:
-      commands: []
-  artifacts:
-    baseDirectory: ui
-    files:
-      - '**/*'
-  cache:
-    paths: []
+applications:
+  - appRoot: ui
+    frontend:
+      phases:
+        preBuild:
+          commands: []
+        build:
+          commands: []
+      artifacts:
+        baseDirectory: .
+        files:
+          - '**/*'
+      cache:
+        paths: []

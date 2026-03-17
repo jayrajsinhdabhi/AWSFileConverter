@@ -7,6 +7,10 @@
   --accent: #0e7490;
   --accent-hover: #155e75;
   --line: #d9dee3;
+  --success: #166534;
+  --success-bg: #f0fdf4;
+  --error: #991b1b;
+  --error-bg: #fef2f2;
 }
 
 * {
@@ -83,6 +87,11 @@ button:focus-visible {
   background: var(--accent-hover);
 }
 
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .download-area {
   margin-top: 1.25rem;
   padding: 0.9rem 1rem;
@@ -96,15 +105,61 @@ button:focus-visible {
   font-size: 1rem;
 }
 
-.download-area p {
+.download-area p,
+.download-area #download-placeholder {
   margin: 0;
   color: var(--muted);
+}
+
+/* Status states written by app.js onto #download-placeholder */
+.status {
+  display: block;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+}
+
+.status--loading {
+  color: var(--accent);
+  background: #ecfeff;
+}
+
+.status--loading::before {
+  content: "";
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: spin 0.7s linear infinite;
+  margin-right: 0.45em;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.status--success {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.status--error {
+  color: var(--error);
+  background: var(--error-bg);
 }
 
 .download-link {
   color: #0c4a6e;
   font-weight: 700;
   text-decoration: underline;
+}
+
+.expiry-note {
+  color: var(--muted);
+  font-size: 0.85em;
 }
 
 @media (max-width: 560px) {

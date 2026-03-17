@@ -1,3 +1,5 @@
+const API_ENDPOINT = "https://wl4xfvngyd.execute-api.us-east-1.amazonaws.com";
+
 const form = document.getElementById("converter-form");
 const fileInput = document.getElementById("file-input");
 const formatSelect = document.getElementById("format-select");

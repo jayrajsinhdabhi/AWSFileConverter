@@ -30,7 +30,7 @@ form.addEventListener("submit", async (event) => {
 
     try {
         // Step 1: Request the URL (PDF output only)
-        const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}&targetFmt=${targetFormat}`);
+        const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}`);
         const { uploadURL } = await response.json();
 
         // Step 2: Upload to S3
@@ -38,8 +38,7 @@ form.addEventListener("submit", async (event) => {
             method: "PUT",
             body: file,
             headers: { 
-                "Content-Type": file.type,
-                "x-amz-meta-targetfmt": targetFormat 
+                "Content-Type": file.type
             }
         });
 

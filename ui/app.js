@@ -23,7 +23,7 @@ form.addEventListener("submit", async (event) => {
     downloadPlaceholder.innerHTML = `<div class="loader"></div> Processing your file...`;
 
     try {
-        const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}`);
+        const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}&targetFmt=${targetFormat}`);
         const { uploadURL } = await response.json();
 
         const uploadResponse = await fetch(uploadURL, {

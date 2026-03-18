@@ -35,10 +35,10 @@ form.addEventListener("submit", async (event) => {
 
     if (uploadResponse.ok) {
       // 3. Generate the download link
-      const fileNameOnly = file.name.split(".").slice(0, -1).join(".");
+      // This takes "me.png" and makes it "me.pdf"
+      const fileNameOnly = file.name.split('.').slice(0, -1).join('.');
       const convertedFileName = `${fileNameOnly}.${targetFormat}`;
-      const bucketUrl =
-        "https://file-converter-storage-jayraj.s3.us-east-1.amazonaws.com";
+      const bucketUrl = "https://file-converter-storage-jayraj.s3.us-east-1.amazonaws.com";
       const downloadUrl = `${bucketUrl}/converted/${convertedFileName}`;
 
       downloadPlaceholder.innerHTML = `

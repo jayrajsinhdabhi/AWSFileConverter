@@ -29,7 +29,10 @@ form.addEventListener("submit", async (event) => {
         const uploadResponse = await fetch(uploadURL, {
             method: "PUT",
             body: file,
-            headers: { "Content-Type": file.type }
+            headers: { 
+                "Content-Type": file.type,
+                "x-amz-meta-targetfmt": targetFormat
+            }
         });
 
         if (uploadResponse.ok) {

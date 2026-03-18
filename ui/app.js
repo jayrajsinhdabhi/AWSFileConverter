@@ -16,14 +16,20 @@ form.addEventListener("submit", async (event) => {
     }
 
     const file = fileInput.files[0];
-    const targetFormat = formatSelect.value.toLowerCase();
+    const targetFormat = "pdf";
+    const isSupportedImage = file.type === "image/png" || file.type === "image/jpeg";
+
+    if (!isSupportedImage) {
+        downloadPlaceholder.textContent = "Only PNG and JPG images are supported for this demo.";
+        return;
+    }
     
     // UI: Start Loading State
     submitBtn.disabled = true;
     downloadPlaceholder.innerHTML = `<div class="loader"></div> Processing your file...`;
 
     try {
-        // Step 1: Request the URL with the format info
+        // Step 1: Request the URL (PDF output only)
         const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}&targetFmt=${targetFormat}`);
         const { uploadURL } = await response.json();
 

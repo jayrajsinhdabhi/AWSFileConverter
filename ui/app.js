@@ -27,7 +27,7 @@ form.addEventListener("submit", async (event) => {
         const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}&targetFmt=${targetFormat}`);
         const { uploadURL } = await response.json();
 
-        // Step 2: Upload with the EXACT same metadata header
+        // Step 2: Upload to S3
         const uploadResponse = await fetch(uploadURL, {
             method: "PUT",
             body: file,

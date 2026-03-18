@@ -23,15 +23,17 @@ form.addEventListener("submit", async (event) => {
     downloadPlaceholder.innerHTML = `<div class="loader"></div> Processing your file...`;
 
     try {
+        // Step 1: Request the URL with the format info
         const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}&targetFmt=${targetFormat}`);
         const { uploadURL } = await response.json();
 
+        // Step 2: Upload with the EXACT same metadata header
         const uploadResponse = await fetch(uploadURL, {
             method: "PUT",
             body: file,
             headers: { 
                 "Content-Type": file.type,
-                "x-amz-meta-targetfmt": targetFormat
+                "x-amz-meta-targetfmt": targetFormat 
             }
         });
 

@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AWS File Converter</title>
     <link rel="stylesheet" href="styles.css" />
+    <!--
+      Deploy script injects a config.js here that sets window.__CONFIG__.
+      Example content:
+        window.__CONFIG__ = { apiUrl: "https://abc123.execute-api.us-east-1.amazonaws.com/prod" };
+    -->
+    <script src="config.js" onerror="window.__CONFIG__ = {};"></script>
   </head>
   <body>
     <main class="container">

@@ -3,7 +3,8 @@ const API_ENDPOINT =
 const form = document.getElementById("converter-form");
 const fileInput = document.getElementById("file-input");
 const formatSelect = document.getElementById("format-select");
-const downloadPlaceholder = document.getElementById("download-placeholder");
+const convertButton = document.getElementById("convert-button");
+const downloadArea = document.getElementById("download-placeholder");
 
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -80,3 +81,34 @@ form.addEventListener("submit", async (event) => {
         submitBtn.disabled = false;
     }
 });
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
+
+function setStatus(type, message) {
+  downloadArea.className = `status status--${type}`;
+  downloadArea.textContent = message;
+}
+
+function setDownloadLink(url, filename, expiresIn) {
+  downloadArea.className = "status status--success";
+  downloadArea.innerHTML = "";
+
+  const msg = document.createElement("span");
+  msg.textContent = "Conversion complete. ";
+  downloadArea.appendChild(msg);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.className = "download-link";
+  link.textContent = `Download ${filename}`;
+  downloadArea.appendChild(link);
+
+  if (expiresIn) {
+    const note = document.createElement("span");
+    note.className = "expiry-note";
+    const minutes = Math.round(expiresIn / 60);
+    note.textContent = ` (link expires in ${minutes} min)`;
+    downloadArea.appendChild(note);
+  }
+}

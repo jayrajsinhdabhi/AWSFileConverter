@@ -8,5 +8,14 @@ Thumbs.db
 # Logs
 *.log
 
-# Node (if added later)
+# Node
 node_modules/
+
+# Test coverage
+coverage/
+
+# AWS SAM build artefacts
+.aws-sam/
+
+# Runtime config injected by deploy script (contains API URL)
+ui/config.js

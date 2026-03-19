@@ -1,0 +1,183 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  AWS File Converter – serverless stack.
+  Accepts file uploads via API Gateway, converts them using Lambda,
+  stores results in S3, and returns a pre-signed download URL.
+
+# ─── Parameters ──────────────────────────────────────────────────────────────
+Parameters:
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+    Description: >
+      Value for the Access-Control-Allow-Origin header returned by the API.
+      Change to your CloudFront / custom domain in production.
+
+  SignedUrlTtl:
+    Type: Number
+    Default: 3600
+    Description: Lifetime (seconds) of the pre-signed S3 download URL.
+
+# ─── Globals ─────────────────────────────────────────────────────────────────
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 512
+    Timeout: 30
+    Architectures:
+      - arm64
+    Environment:
+      Variables:
+        BUCKET_NAME: !Ref FilesBucket
+        ALLOWED_ORIGIN: !Ref AllowedOrigin
+        SIGNED_URL_TTL: !Ref SignedUrlTtl
+
+# ─── Resources ───────────────────────────────────────────────────────────────
+Resources:
+
+  # ── S3 bucket ──────────────────────────────────────────────────────────────
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "aws-file-converter-${AWS::AccountId}-${AWS::Region}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireUploads
+            Status: Enabled
+            Prefix: uploads/
+            ExpirationInDays: 1
+          - Id: ExpireConverted
+            Status: Enabled
+            Prefix: converted/
+            ExpirationInDays: 1
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Ref AllowedOrigin
+            AllowedMethods:
+              - GET
+              - PUT
+            AllowedHeaders:
+              - "*"
+            MaxAge: 3000
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ── Lambda function ────────────────────────────────────────────────────────
+  ConvertFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: src/handler.handler
+      Description: Converts uploaded files and stores results in S3.
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref FilesBucket
+      Events:
+        ConvertPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ConverterApi
+            Path: /convert
+            Method: POST
+        ConvertOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ConverterApi
+            Path: /convert
+            Method: OPTIONS
+
+  # ── API Gateway ────────────────────────────────────────────────────────────
+  ConverterApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      BinaryMediaTypes:
+        - "multipart/form-data"
+      Cors:
+        AllowMethods: "'POST,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: !Sub "'${AllowedOrigin}'"
+
+  # ── Static website hosting (S3 + CloudFront) ──────────────────────────────
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "aws-file-converter-ui-${AWS::AccountId}-${AWS::Region}"
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "arn:aws:s3:::${WebsiteBucket}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebsiteDistribution}"
+
+  WebsiteOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "aws-file-converter-oac-${AWS::StackName}"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  WebsiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt WebsiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt WebsiteOriginAccessControl.Id
+            S3OriginConfig: {}
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+# ─── Outputs ─────────────────────────────────────────────────────────────────
+Outputs:
+  ApiUrl:
+    Description: Base URL of the REST API
+    Value: !Sub "https://${ConverterApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+
+  CloudFrontUrl:
+    Description: Public URL of the static website
+    Value: !Sub "https://${WebsiteDistribution.DomainName}"
+
+  FilesBucketName:
+    Description: S3 bucket used for file storage
+    Value: !Ref FilesBucket
+
+  WebsiteBucketName:
+    Description: S3 bucket used for the static website
+    Value: !Ref WebsiteBucket

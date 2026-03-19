@@ -1,18 +1,37 @@
-# UI Skeleton
+# UI
 
-This folder is a static frontend that can be hosted on any static hosting platform.
+Static frontend for the AWS File Converter.  
+Hosted on S3 + CloudFront, deployed by the SAM stack defined in `template.yaml`.
 
-## Included
+## Files
 
-- File upload input
-- Target format dropdown
-- Convert button
-- Placeholder area for future download link
+| File | Purpose |
+|---|---|
+| `index.html` | Main page |
+| `styles.css` | Styles (including status/loading states) |
+| `app.js` | Form submission, calls `/convert` API, renders download link |
+| `config.js` | **Generated at deploy time** – injects `window.__CONFIG__.apiUrl` |
 
-## Quick local preview
+## Local development
 
-Open `index.html` directly in a browser, or run a simple static server.
+```bash
+# Option A – open directly in browser (no real API calls without config.js)
+open index.html
 
-## Cloud hosting target
+# Option B – simple static server
+npx serve .
+```
 
-Use this folder as the upload source for an S3 static website bucket (or CloudFront + S3) when you are ready to host in AWS.
+Create a `config.js` next to `index.html` to point at a deployed API:
+
+```js
+window.__CONFIG__ = {
+  apiUrl: "https://<api-id>.execute-api.<region>.amazonaws.com/prod"
+};
+```
+
+## Deploy
+
+Run `sam deploy` from the repository root (see root `README.md`).  
+The deploy script generates `config.js` from the SAM stack `ApiUrl` output and
+uploads all files in this folder to the `WebsiteBucket` S3 bucket.

@@ -11,21 +11,16 @@
       <section class="card" aria-labelledby="title">
         <h1 id="title">AWS File Converter</h1>
         <p class="subtitle">
-          Upload a file, pick a target format, and convert.
+          Upload an image and convert it to PDF.
         </p>
 
         <form id="converter-form" class="form" novalidate>
-          <label for="file-input">Choose file</label>
-          <input id="file-input" name="file" type="file" required />
+          <label for="file-input">Choose image</label>
+          <input id="file-input" name="file" type="file" accept="image/png,image/jpeg" required />
 
           <label for="format-select">Target format</label>
           <select id="format-select" name="targetFormat" required>
-            <option value="" selected disabled>Select a format</option>
-            <option value="pdf">PDF</option>
-            <option value="docx">DOCX</option>
-            <option value="txt">TXT</option>
-            <option value="jpg">JPG</option>
-            <option value="png">PNG</option>
+            <option value="pdf" selected>to PDF</option>
           </select>
 
           <button id="convert-button" type="submit">Convert</button>

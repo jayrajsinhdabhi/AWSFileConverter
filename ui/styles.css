@@ -139,12 +139,6 @@ button:focus-visible {
   background: var(--accent-hover);
 }
 
-.download-btn.disabled {
-  background: #9ca3af;
-  pointer-events: none;
-  cursor: not-allowed;
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);

@@ -43,21 +43,35 @@ form.addEventListener("submit", async (event) => {
         });
 
         if (uploadResponse.ok) {
-            // Give the Lambda 3 seconds to finish the conversion
-            setTimeout(() => {
-                const fileNameOnly = file.name.split('.').slice(0, -1).join('.');
-                const convertedFileName = `${fileNameOnly}.${targetFormat}`;
-                const bucketUrl = "https://file-converter-storage-jayraj.s3.us-east-1.amazonaws.com";
-                const downloadUrl = `${bucketUrl}/converted/${convertedFileName}`;
+            const fileNameOnly = file.name.split('.').slice(0, -1).join('.');
+            const convertedFileName = `${fileNameOnly}.${targetFormat}`;
+            const bucketUrl = "https://file-converter-storage-jayraj.s3.us-east-1.amazonaws.com";
+            const downloadUrl = `${bucketUrl}/converted/${convertedFileName}`;
 
-                downloadPlaceholder.innerHTML = `
-                    <p style="color: green; font-weight: bold;">✅ Ready for Download!</p>
-                    <a href="${downloadUrl}" target="_blank" class="download-btn" style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">
-                        Download ${targetFormat.toUpperCase()}
-                    </a>
-                `;
-                submitBtn.disabled = false;
-            }, 3000); // 3 second delay
+            // Polling function to check if the file exists in S3
+            const checkFileExists = async () => {
+                try {
+                    const checkResponse = await fetch(downloadUrl, { method: "HEAD" });
+                    if (checkResponse.ok) {
+                        // File is finally ready!
+                        downloadPlaceholder.innerHTML = `
+                            <p style="color: green; font-weight: bold;">✅ Ready for Download!</p>
+                            <a href="${downloadUrl}" target="_blank" class="download-btn" style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">
+                                Download ${targetFormat.toUpperCase()}
+                            </a>
+                        `;
+                        submitBtn.disabled = false;
+                    } else {
+                        // Not ready yet, check again in 2 seconds
+                        setTimeout(checkFileExists, 2000);
+                    }
+                } catch (e) {
+                    setTimeout(checkFileExists, 2000);
+                }
+            };
+
+            downloadPlaceholder.innerHTML = `<div class="loader"></div> Converting your file... please wait.`;
+            checkFileExists(); // Start the first check
         } else {
             throw new Error("Upload Failed");
         }

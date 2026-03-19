@@ -1,83 +1,66 @@
-const API_ENDPOINT =
-  "https://wl4xfvngyd.execute-api.us-east-1.amazonaws.com/get-url";
+const API_BASE_URL =
+    (window.__CONFIG__ && window.__CONFIG__.apiUrl) ||
+    "https://wl4xfvngyd.execute-api.us-east-1.amazonaws.com/prod";
+const CONVERT_ENDPOINT = `${API_BASE_URL.replace(/\/$/, "")}/convert`;
+
 const form = document.getElementById("converter-form");
 const fileInput = document.getElementById("file-input");
 const formatSelect = document.getElementById("format-select");
-const convertButton = document.getElementById("convert-button");
 const downloadArea = document.getElementById("download-placeholder");
 
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
     const submitBtn = form.querySelector('button[type="submit"]');
-    
+
     if (!fileInput.files.length || !formatSelect.value) {
-        downloadPlaceholder.textContent = "Please select a file and format.";
+        setStatus("error", "Please select a file and format.");
         return;
     }
 
     const file = fileInput.files[0];
-    const targetFormat = "pdf";
-    const isSupportedImage = file.type === "image/png" || file.type === "image/jpeg";
+    const targetFormat = formatSelect.value;
+    const isSupportedImage =
+        file.type === "image/png" || file.type === "image/jpeg";
 
     if (!isSupportedImage) {
-        downloadPlaceholder.textContent = "Only PNG and JPG images are supported for this demo.";
+        setStatus("error", "Only PNG and JPG images are supported for this demo.");
         return;
     }
-    
-    // UI: Start Loading State
+
     submitBtn.disabled = true;
-    downloadPlaceholder.innerHTML = `<div class="loader"></div> Processing your file...`;
+    setStatus("info", "Converting your file... please wait.");
 
     try {
-        // Step 1: Request the URL (PDF output only)
-        const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}`);
-        const { uploadURL } = await response.json();
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("targetFormat", targetFormat);
 
-        // Step 2: Upload to S3
-        const uploadResponse = await fetch(uploadURL, {
-            method: "PUT",
-            body: file,
-            headers: { 
-                "Content-Type": file.type
-            }
+        const response = await fetch(CONVERT_ENDPOINT, {
+            method: "POST",
+            body: formData,
         });
 
-        if (uploadResponse.ok) {
-            const fileNameOnly = file.name.split('.').slice(0, -1).join('.');
-            const convertedFileName = `${fileNameOnly}.${targetFormat}`;
-            const bucketUrl = "https://file-converter-storage-jayraj.s3.us-east-1.amazonaws.com";
-            const downloadUrl = `${bucketUrl}/converted/${convertedFileName}`;
-
-            // Polling function to check if the file exists in S3
-            const checkFileExists = async () => {
-                try {
-                    const checkResponse = await fetch(downloadUrl, { method: "HEAD" });
-                    if (checkResponse.ok) {
-                        // File is finally ready!
-                        downloadPlaceholder.innerHTML = `
-                            <p style="color: green; font-weight: bold;">✅ Ready for Download!</p>
-                            <a href="${downloadUrl}" target="_blank" class="download-btn" style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">
-                                Download ${targetFormat.toUpperCase()}
-                            </a>
-                        `;
-                        submitBtn.disabled = false;
-                    } else {
-                        // Not ready yet, check again in 2 seconds
-                        setTimeout(checkFileExists, 2000);
-                    }
-                } catch (e) {
-                    setTimeout(checkFileExists, 2000);
-                }
-            };
-
-            downloadPlaceholder.innerHTML = `<div class="loader"></div> Converting your file... please wait.`;
-            checkFileExists(); // Start the first check
-        } else {
-            throw new Error("Upload Failed");
+        let payload = {};
+        try {
+            payload = await response.json();
+        } catch (parseError) {
+            payload = {};
         }
+
+        if (!response.ok) {
+            throw new Error(payload.error || `Conversion failed (${response.status}).`);
+        }
+
+        if (!payload.downloadUrl) {
+            throw new Error("No download URL was returned by the API.");
+        }
+
+        const fallbackName = `${file.name.replace(/\.[^.]+$/, "")}.${targetFormat}`;
+        setDownloadLink(payload.downloadUrl, payload.filename || fallbackName, payload.expiresIn);
     } catch (error) {
-        downloadPlaceholder.textContent = "Error: " + error.message;
+        setStatus("error", `Error: ${error.message}`);
+    } finally {
         submitBtn.disabled = false;
     }
 });

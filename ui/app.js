@@ -1,7 +1,6 @@
-const API_BASE_URL =
-    (window.__CONFIG__ && window.__CONFIG__.apiUrl) ||
-    "https://wl4xfvngyd.execute-api.us-east-1.amazonaws.com/prod";
-const CONVERT_ENDPOINT = `${API_BASE_URL.replace(/\/$/, "")}/convert`;
+const BUCKET_NAME = "file-converter-storage-jayraj";
+const REGION = "us-east-1";
+const BUCKET_URL = `https://${BUCKET_NAME}.s3.${REGION}.amazonaws.com`;
 
 const form = document.getElementById("converter-form");
 const fileInput = document.getElementById("file-input");
@@ -9,89 +8,83 @@ const formatSelect = document.getElementById("format-select");
 const downloadArea = document.getElementById("download-placeholder");
 
 form.addEventListener("submit", async (event) => {
-    event.preventDefault();
+        event.preventDefault();
+        const submitBtn = form.querySelector('button[type="submit"]');
 
-    const submitBtn = form.querySelector('button[type="submit"]');
+        if (!fileInput.files.length) {
+                setStatus("error", "Please select a file.");
+                return;
+        }
 
-    if (!fileInput.files.length || !formatSelect.value) {
-        setStatus("error", "Please select a file and format.");
-        return;
-    }
+        const file = fileInput.files[0];
+        const targetFormat = formatSelect.value;
+        const fileNameOnly = file.name.split(".").slice(0, -1).join(".");
 
-    const file = fileInput.files[0];
-    const targetFormat = formatSelect.value;
-    const isSupportedImage =
-        file.type === "image/png" || file.type === "image/jpeg";
+        // Generate a unique key to avoid cache/collision issues.
+        const uniqueId = Date.now();
+        const uploadKey = `uploads/${uniqueId}-${file.name}`;
+        const downloadUrl = `${BUCKET_URL}/converted/${uniqueId}-${fileNameOnly}.pdf`;
 
-    if (!isSupportedImage) {
-        setStatus("error", "Only PNG and JPG images are supported for this demo.");
-        return;
-    }
+        submitBtn.disabled = true;
+        setStatus("info", "Uploading to S3...");
 
-    submitBtn.disabled = true;
-    setStatus("info", "Converting your file... please wait.");
-
-    try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("targetFormat", targetFormat);
-
-        const response = await fetch(CONVERT_ENDPOINT, {
-            method: "POST",
-            body: formData,
-        });
-
-        let payload = {};
         try {
-            payload = await response.json();
-        } catch (parseError) {
-            payload = {};
-        }
+                // Upload directly to S3 uploads/ folder.
+                const uploadResponse = await fetch(`${BUCKET_URL}/${uploadKey}`, {
+                        method: "PUT",
+                        body: file,
+                        headers: { "Content-Type": file.type }
+                });
 
-        if (!response.ok) {
-            throw new Error(payload.error || `Conversion failed (${response.status}).`);
-        }
+                if (!uploadResponse.ok) {
+                        throw new Error("Upload to S3 failed. Check CORS settings.");
+                }
 
-        if (!payload.downloadUrl) {
-            throw new Error("No download URL was returned by the API.");
-        }
+                setStatus("info", "Upload successful! Waiting for Lambda to convert...");
 
-        const fallbackName = `${file.name.replace(/\.[^.]+$/, "")}.${targetFormat}`;
-        setDownloadLink(payload.downloadUrl, payload.filename || fallbackName, payload.expiresIn);
-    } catch (error) {
-        setStatus("error", `Error: ${error.message}`);
-    } finally {
-        submitBtn.disabled = false;
-    }
+                // Start polling for the converted file.
+                let attempts = 0;
+                const maxAttempts = 30;
+
+                const checkFile = setInterval(async () => {
+                        attempts += 1;
+                        try {
+                                const response = await fetch(downloadUrl, { method: "HEAD" });
+                                if (response.ok) {
+                                        clearInterval(checkFile);
+                                        setDownloadLink(downloadUrl, `${fileNameOnly}.pdf`);
+                                        submitBtn.disabled = false;
+                                }
+                        } catch (e) {
+                                // Ignore transient polling errors.
+                        }
+
+                        if (attempts >= maxAttempts) {
+                                clearInterval(checkFile);
+                                setStatus("error", "Conversion timed out. Check CloudWatch logs.");
+                                submitBtn.disabled = false;
+                        }
+                }, 2000);
+        } catch (error) {
+                setStatus("error", `Error: ${error.message}`);
+                submitBtn.disabled = false;
+        }
 });
 
 // ─── UI helpers ──────────────────────────────────────────────────────────────
 
 function setStatus(type, message) {
-  downloadArea.className = `status status--${type}`;
-  downloadArea.textContent = message;
+        downloadArea.className = `status status--${type}`;
+        downloadArea.innerHTML = type === "info" ? `<div class="spinner"></div> ${message}` : message;
 }
 
-function setDownloadLink(url, filename, expiresIn) {
-  downloadArea.className = "status status--success";
-  downloadArea.innerHTML = "";
-
-  const msg = document.createElement("span");
-  msg.textContent = "Conversion complete. ";
-  downloadArea.appendChild(msg);
-
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.className = "download-link";
-  link.textContent = `Download ${filename}`;
-  downloadArea.appendChild(link);
-
-  if (expiresIn) {
-    const note = document.createElement("span");
-    note.className = "expiry-note";
-    const minutes = Math.round(expiresIn / 60);
-    note.textContent = ` (link expires in ${minutes} min)`;
-    downloadArea.appendChild(note);
-  }
+function setDownloadLink(url, filename) {
+        downloadArea.className = "status status--success";
+        downloadArea.innerHTML = `
+                <span>Conversion complete!</span>
+                <br><br>
+                <a href="${url}" target="_blank" class="download-link" style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px;">
+                        Download ${filename}
+                </a>
+        `;
 }

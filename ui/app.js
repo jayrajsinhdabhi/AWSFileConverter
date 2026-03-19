@@ -1,16 +1,5 @@
-/**
- * AWS File Converter – frontend logic.
- *
- * Reads API_URL from a window-level config object injected at deploy time
- * (window.__CONFIG__.apiUrl).  During local development you can override it
- * by creating a config.js that sets window.__CONFIG__ before this script runs,
- * or by setting the constant below directly.
- */
-
-const API_URL =
-  (window.__CONFIG__ && window.__CONFIG__.apiUrl) ||
-  ""; // filled in by deploy script or config.js
-
+const API_ENDPOINT =
+  "https://wl4xfvngyd.execute-api.us-east-1.amazonaws.com/get-url";
 const form = document.getElementById("converter-form");
 const fileInput = document.getElementById("file-input");
 const formatSelect = document.getElementById("format-select");
@@ -18,48 +7,79 @@ const convertButton = document.getElementById("convert-button");
 const downloadArea = document.getElementById("download-placeholder");
 
 form.addEventListener("submit", async (event) => {
-  event.preventDefault();
+    event.preventDefault();
 
-  if (!fileInput.files.length || !formatSelect.value) {
-    setStatus("error", "Please select a file and a target format.");
-    return;
-  }
-
-  if (!API_URL) {
-    setStatus(
-      "error",
-      "API endpoint is not configured. " +
-        "Set window.__CONFIG__.apiUrl or deploy via AWS SAM."
-    );
-    return;
-  }
-
-  const file = fileInput.files[0];
-  const targetFormat = formatSelect.value;
-
-  setStatus("loading", "Converting…");
-  convertButton.disabled = true;
-
-  try {
-    const body = new FormData();
-    body.append("file", file, file.name);
-    body.append("targetFormat", targetFormat);
-
-    const res = await fetch(`${API_URL}/convert`, { method: "POST", body });
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || `Server error ${res.status}`);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    
+    if (!fileInput.files.length || !formatSelect.value) {
+        downloadPlaceholder.textContent = "Please select a file and format.";
+        return;
     }
 
-    const baseName = file.name.replace(/\.[^.]+$/, "");
-    const downloadName = `${baseName}.${targetFormat}`;
-    setDownloadLink(data.downloadUrl, downloadName, data.expiresIn);
-  } catch (err) {
-    setStatus("error", err.message || "An unexpected error occurred.");
-  } finally {
-    convertButton.disabled = false;
-  }
+    const file = fileInput.files[0];
+    const targetFormat = "pdf";
+    const isSupportedImage = file.type === "image/png" || file.type === "image/jpeg";
+
+    if (!isSupportedImage) {
+        downloadPlaceholder.textContent = "Only PNG and JPG images are supported for this demo.";
+        return;
+    }
+    
+    // UI: Start Loading State
+    submitBtn.disabled = true;
+    downloadPlaceholder.innerHTML = `<div class="loader"></div> Processing your file...`;
+
+    try {
+        // Step 1: Request the URL (PDF output only)
+        const response = await fetch(`${API_ENDPOINT}?filename=${encodeURIComponent(file.name)}`);
+        const { uploadURL } = await response.json();
+
+        // Step 2: Upload to S3
+        const uploadResponse = await fetch(uploadURL, {
+            method: "PUT",
+            body: file,
+            headers: { 
+                "Content-Type": file.type
+            }
+        });
+
+        if (uploadResponse.ok) {
+            const fileNameOnly = file.name.split('.').slice(0, -1).join('.');
+            const convertedFileName = `${fileNameOnly}.${targetFormat}`;
+            const bucketUrl = "https://file-converter-storage-jayraj.s3.us-east-1.amazonaws.com";
+            const downloadUrl = `${bucketUrl}/converted/${convertedFileName}`;
+
+            // Polling function to check if the file exists in S3
+            const checkFileExists = async () => {
+                try {
+                    const checkResponse = await fetch(downloadUrl, { method: "HEAD" });
+                    if (checkResponse.ok) {
+                        // File is finally ready!
+                        downloadPlaceholder.innerHTML = `
+                            <p style="color: green; font-weight: bold;">✅ Ready for Download!</p>
+                            <a href="${downloadUrl}" target="_blank" class="download-btn" style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">
+                                Download ${targetFormat.toUpperCase()}
+                            </a>
+                        `;
+                        submitBtn.disabled = false;
+                    } else {
+                        // Not ready yet, check again in 2 seconds
+                        setTimeout(checkFileExists, 2000);
+                    }
+                } catch (e) {
+                    setTimeout(checkFileExists, 2000);
+                }
+            };
+
+            downloadPlaceholder.innerHTML = `<div class="loader"></div> Converting your file... please wait.`;
+            checkFileExists(); // Start the first check
+        } else {
+            throw new Error("Upload Failed");
+        }
+    } catch (error) {
+        downloadPlaceholder.textContent = "Error: " + error.message;
+        submitBtn.disabled = false;
+    }
 });
 
 // ─── UI helpers ──────────────────────────────────────────────────────────────

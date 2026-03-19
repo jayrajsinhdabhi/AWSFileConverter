@@ -111,44 +111,48 @@ button:disabled {
   color: var(--muted);
 }
 
-/* Status states written by app.js onto #download-placeholder */
-.status {
-  display: block;
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.95rem;
+.loading-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--muted);
+  font-weight: 600;
 }
 
-.status--loading {
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: spin 0.8s linear infinite;
+}
+
+.success-text {
   color: var(--accent);
-  background: #ecfeff;
+  font-weight: 700;
 }
 
-.status--loading::before {
-  content: "";
+.download-btn {
   display: inline-block;
-  width: 0.9em;
-  height: 0.9em;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  vertical-align: middle;
-  animation: spin 0.7s linear infinite;
-  margin-right: 0.45em;
+  margin-top: 0.6rem;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.download-btn:hover,
+.download-btn:focus-visible {
+  background: var(--accent-hover);
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.status--success {
-  color: var(--success);
-  background: var(--success-bg);
-}
-
-.status--error {
-  color: var(--error);
-  background: var(--error-bg);
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .download-link {
@@ -157,9 +161,21 @@ button:disabled {
   text-decoration: underline;
 }
 
-.expiry-note {
-  color: var(--muted);
-  font-size: 0.85em;
+/* Loading Spinner Animation */
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 10px;
+}
+
+.hidden {
+  display: none;
 }
 
 @media (max-width: 560px) {

@@ -26,13 +26,13 @@ export const handler = async (event) => {
     page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
 
     const outputBuffer = await pdfDoc.save();
-    const sourceFileName = key.split("/").pop();
-    const newKey = `converted/${sourceFileName.replace(/\.[^/.]+$/, ".pdf")}`;
+    const fullFileName = key.split("/").pop().split(".")[0];
+    const outputKey = `converted/${fullFileName}.pdf`;
 
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
-        Key: newKey,
+        Key: outputKey,
         Body: outputBuffer,
         ContentType: "application/pdf",
       }),

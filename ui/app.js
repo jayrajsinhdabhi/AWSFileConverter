@@ -1,90 +1,82 @@
-const BUCKET_NAME = "file-converter-storage-jayraj";
-const REGION = "us-east-1";
-const BUCKET_URL = `https://${BUCKET_NAME}.s3.${REGION}.amazonaws.com`;
-
 const form = document.getElementById("converter-form");
 const fileInput = document.getElementById("file-input");
 const formatSelect = document.getElementById("format-select");
-const downloadArea = document.getElementById("download-placeholder");
+const statusNode = document.getElementById("download-placeholder");
+
+const apiUrl = ((window.__CONFIG__ && window.__CONFIG__.apiUrl) || "").replace(/\/$/, "");
+
+const SUPPORTED_IMAGE_TYPES = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "image/tiff",
+        "image/avif",
+];
+
+function setStatus(type, message) {
+        statusNode.className = `status status--${type}`;
+        statusNode.innerHTML =
+                type === "info" ? `<span class="spinner" aria-hidden="true"></span>${message}` : message;
+}
+
+function setDownloadLink(url, filename, expiresInSeconds) {
+        statusNode.className = "status status--success";
+        statusNode.innerHTML = `
+                <span class="success-text">Conversion complete.</span>
+                <a href="${url}" target="_blank" rel="noopener noreferrer" class="download-btn">
+                        Download ${filename}
+                </a>
+                <span class="expiry-note">Link expires in about ${Math.floor(expiresInSeconds / 60)} minutes.</span>
+        `;
+}
+
+formatSelect.value = "pdf";
+formatSelect.disabled = true;
 
 form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const submitBtn = form.querySelector('button[type="submit"]');
+        const submitButton = form.querySelector('button[type="submit"]');
 
-        if (!fileInput.files.length) {
-                setStatus("error", "Please select a file.");
+        if (!apiUrl) {
+                setStatus("error", "Missing API URL. Create ui/config.js with window.__CONFIG__.apiUrl.");
                 return;
         }
 
         const file = fileInput.files[0];
-        const targetFormat = formatSelect.value;
-        const fileNameOnly = file.name.split(".").slice(0, -1).join(".");
+        if (!file) {
+                setStatus("error", "Please select a file.");
+                return;
+        }
 
-        // Generate a unique key to avoid cache/collision issues.
-        const uniqueId = Date.now();
-        const uploadKey = `uploads/${uniqueId}-${file.name}`;
-        const downloadUrl = `${BUCKET_URL}/converted/${uniqueId}-${fileNameOnly}.pdf`;
+        if (!SUPPORTED_IMAGE_TYPES.includes(file.type)) {
+                setStatus("error", "Please select a supported image file (JPG, PNG, WEBP, GIF, TIFF, AVIF).");
+                return;
+        }
 
-        submitBtn.disabled = true;
-        setStatus("info", "Uploading to S3...");
+        submitButton.disabled = true;
+        setStatus("info", "Uploading and converting...");
 
         try {
-                // Upload directly to S3 uploads/ folder.
-                const uploadResponse = await fetch(`${BUCKET_URL}/${uploadKey}`, {
-                        method: "PUT",
-                        body: file,
-                        headers: { "Content-Type": file.type }
+                const payload = new FormData();
+                payload.append("file", file);
+                payload.append("targetFormat", "pdf");
+
+                const response = await fetch(`${apiUrl}/convert`, {
+                        method: "POST",
+                        body: payload,
                 });
 
-                if (!uploadResponse.ok) {
-                        throw new Error("Upload to S3 failed. Check CORS settings.");
+                const result = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                        throw new Error(result.error || "Conversion request failed.");
                 }
 
-                setStatus("info", "Upload successful! Waiting for Lambda to convert...");
-
-                // Start polling for the converted file.
-                let attempts = 0;
-                const maxAttempts = 30;
-
-                const checkFile = setInterval(async () => {
-                        attempts += 1;
-                        try {
-                                const response = await fetch(downloadUrl, { method: "HEAD" });
-                                if (response.ok) {
-                                        clearInterval(checkFile);
-                                        setDownloadLink(downloadUrl, `${fileNameOnly}.pdf`);
-                                        submitBtn.disabled = false;
-                                }
-                        } catch (e) {
-                                // Ignore transient polling errors.
-                        }
-
-                        if (attempts >= maxAttempts) {
-                                clearInterval(checkFile);
-                                setStatus("error", "Conversion timed out. Check CloudWatch logs.");
-                                submitBtn.disabled = false;
-                        }
-                }, 2000);
+                setDownloadLink(result.downloadUrl, result.filename, result.expiresIn || 3600);
         } catch (error) {
                 setStatus("error", `Error: ${error.message}`);
-                submitBtn.disabled = false;
+        } finally {
+                submitButton.disabled = false;
         }
 });
-
-// ─── UI helpers ──────────────────────────────────────────────────────────────
-
-function setStatus(type, message) {
-        downloadArea.className = `status status--${type}`;
-        downloadArea.innerHTML = type === "info" ? `<div class="spinner"></div> ${message}` : message;
-}
-
-function setDownloadLink(url, filename) {
-        downloadArea.className = "status status--success";
-        downloadArea.innerHTML = `
-                <span>Conversion complete!</span>
-                <br><br>
-                <a href="${url}" target="_blank" class="download-link" style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px;">
-                        Download ${filename}
-                </a>
-        `;
-}

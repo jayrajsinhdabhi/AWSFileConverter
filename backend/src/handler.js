@@ -5,7 +5,6 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { randomUUID } = require("crypto");
 const Busboy = require("busboy");
 const PDFDocument = require("pdfkit");
-const pdfParse = require("pdf-parse");
 const sharp = require("sharp");
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-east-1" });
@@ -87,68 +86,7 @@ async function presignedUrl(key) {
   );
 }
 
-/** Download an object from S3 into a Buffer. */
-async function downloadFromS3(key) {
-  const { Body } = await s3.send(
-    new GetObjectCommand({ Bucket: BUCKET, Key: key })
-  );
-  const chunks = [];
-  for await (const chunk of Body) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}
-
-// ─── Converters ──────────────────────────────────────────────────────────────
-
-/** Convert a plain-text buffer to a PDF buffer. */
-async function textToPdf(textBuffer) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50 });
-    const chunks = [];
-    doc.on("data", (c) => chunks.push(c));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-    doc.fontSize(12).text(textBuffer.toString("utf8"));
-    doc.end();
-  });
-}
-
-/** Extract text from a PDF buffer and return a plain-text buffer. */
-async function pdfToText(pdfBuffer) {
-  const data = await pdfParse(pdfBuffer);
-  return Buffer.from(data.text, "utf8");
-}
-
-/** Convert an image buffer to a different format using sharp. */
-async function convertImage(imageBuffer, targetFormat) {
-  const fmt = targetFormat.toLowerCase();
-  const supported = ["jpg", "jpeg", "png", "webp", "gif", "tiff", "avif"];
-  if (!supported.includes(fmt)) {
-    throw new Error(`Unsupported image target format: ${targetFormat}`);
-  }
-  const sharpFmt = fmt === "jpg" ? "jpeg" : fmt;
-  return sharp(imageBuffer).toFormat(sharpFmt).toBuffer();
-}
-
-// ─── Conversion dispatch ──────────────────────────────────────────────────────
-
-const MIME = {
-  pdf: "application/pdf",
-  txt: "text/plain",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-  gif: "image/gif",
-  tiff: "image/tiff",
-  avif: "image/avif",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-};
-
-function mimeForFormat(fmt) {
-  return MIME[fmt.toLowerCase()] || "application/octet-stream";
-}
+const IMAGE_FORMATS = new Set(["jpg", "jpeg", "png", "webp", "gif", "tiff", "avif"]);
 
 /** Return the file extension from a filename. */
 function extOf(filename) {
@@ -156,33 +94,21 @@ function extOf(filename) {
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : "";
 }
 
-const IMAGE_FORMATS = new Set(["jpg", "jpeg", "png", "webp", "gif", "tiff", "avif"]);
+async function convertImageToPdf(imageBuffer) {
+  const normalizedImage = await sharp(imageBuffer).png().toBuffer();
+  const { width = 1200, height = 1600 } = await sharp(normalizedImage).metadata();
 
-async function convert(sourceBuffer, sourceFilename, targetFormat) {
-  const srcExt = extOf(sourceFilename);
-  const tgtFmt = targetFormat.toLowerCase();
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
+    const chunks = [];
+    doc.on("data", (c) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
 
-  // txt → pdf
-  if ((srcExt === "txt" || srcExt === "csv") && tgtFmt === "pdf") {
-    return { buffer: await textToPdf(sourceBuffer), mime: MIME.pdf };
-  }
-
-  // pdf → txt
-  if (srcExt === "pdf" && tgtFmt === "txt") {
-    return { buffer: await pdfToText(sourceBuffer), mime: MIME.txt };
-  }
-
-  // image → image
-  if (IMAGE_FORMATS.has(srcExt) && IMAGE_FORMATS.has(tgtFmt)) {
-    return {
-      buffer: await convertImage(sourceBuffer, tgtFmt),
-      mime: mimeForFormat(tgtFmt),
-    };
-  }
-
-  throw new Error(
-    `Conversion from .${srcExt} to .${tgtFmt} is not supported.`
-  );
+    doc.addPage({ size: [width, height] });
+    doc.image(normalizedImage, 0, 0, { width, height });
+    doc.end();
+  });
 }
 
 // ─── Lambda handler ───────────────────────────────────────────────────────────
@@ -202,14 +128,20 @@ exports.handler = async (event) => {
       return response(400, { error: "Failed to parse request body: " + err.message });
     }
 
-    const targetFormat = (fields.targetFormat || "").trim().toLowerCase();
+    const targetFormat = (fields.targetFormat || "pdf").trim().toLowerCase();
     const filename = (fileField && fileField.filename) || "upload";
+    const sourceExt = extOf(filename);
 
     if (!fileBuffer || !fileBuffer.length) {
       return response(400, { error: "No file provided." });
     }
-    if (!targetFormat) {
-      return response(400, { error: "targetFormat field is required." });
+    if (targetFormat !== "pdf") {
+      return response(422, { error: "Only PDF output is supported." });
+    }
+    if (!IMAGE_FORMATS.has(sourceExt)) {
+      return response(422, {
+        error: "Only image files are supported (.jpg, .jpeg, .png, .webp, .gif, .tiff, .avif).",
+      });
     }
 
     // Store original upload
@@ -218,21 +150,17 @@ exports.handler = async (event) => {
     await uploadToS3(fileBuffer, originalKey, fileField.mimeType || "application/octet-stream");
 
     // Convert
-    let convertedBuffer, convertedMime;
+    let convertedBuffer;
     try {
-      ({ buffer: convertedBuffer, mime: convertedMime } = await convert(
-        fileBuffer,
-        filename,
-        targetFormat
-      ));
+      convertedBuffer = await convertImageToPdf(fileBuffer);
     } catch (err) {
-      return response(422, { error: err.message });
+      return response(422, { error: "Image-to-PDF conversion failed." });
     }
 
     // Store converted file
-    const convertedFilename = filename.replace(/\.[^.]+$/, "") + "." + targetFormat;
+    const convertedFilename = filename.replace(/\.[^.]+$/, "") + ".pdf";
     const convertedKey = `converted/${uploadId}/${convertedFilename}`;
-    await uploadToS3(convertedBuffer, convertedKey, convertedMime);
+    await uploadToS3(convertedBuffer, convertedKey, "application/pdf");
 
     // Generate pre-signed download URL
     const downloadUrl = await presignedUrl(convertedKey);

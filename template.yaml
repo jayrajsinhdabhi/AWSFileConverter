@@ -24,10 +24,10 @@ Parameters:
 Globals:
   Function:
     Runtime: nodejs20.x
-    MemorySize: 512
-    Timeout: 30
+    MemorySize: 1024
+    Timeout: 60
     Architectures:
-      - arm64
+      - x86_64
     Environment:
       Variables:
         BUCKET_NAME: !Ref FilesBucket
@@ -71,6 +71,9 @@ Resources:
   # ── Lambda function ────────────────────────────────────────────────────────
   ConvertFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: nodejs20.x
+      BuildArchitecture: x86_64
     Properties:
       CodeUri: backend/
       Handler: src/handler.handler

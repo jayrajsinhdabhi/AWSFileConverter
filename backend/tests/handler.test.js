@@ -3,8 +3,7 @@
 /**
  * Unit tests for the Lambda handler.
  *
- * AWS SDK and external libraries are mocked so no real AWS calls are made
- * and no native binaries need to be present.
+ * AWS SDK and external libraries are mocked so no real AWS calls are made.
  */
 
 // ─── Mock AWS SDK ─────────────────────────────────────────────────────────────
@@ -26,24 +25,20 @@ jest.mock("@aws-sdk/s3-request-presigner", () => ({
 // ─── Mock sharp ───────────────────────────────────────────────────────────────
 jest.mock("sharp", () => {
   const mockInstance = {
-    toFormat: jest.fn().mockReturnThis(),
-    toBuffer: jest.fn().mockResolvedValue(Buffer.from("fake-image")),
+    png: jest.fn().mockReturnThis(),
+    toBuffer: jest.fn().mockResolvedValue(Buffer.from("normalized-png")),
+    metadata: jest.fn().mockResolvedValue({ width: 640, height: 480 }),
   };
   return jest.fn(() => mockInstance);
 });
-
-// ─── Mock pdf-parse ───────────────────────────────────────────────────────────
-jest.mock("pdf-parse", () =>
-  jest.fn().mockResolvedValue({ text: "Extracted text from PDF." })
-);
 
 // ─── Mock pdfkit ─────────────────────────────────────────────────────────────
 jest.mock("pdfkit", () => {
   const { EventEmitter } = require("events");
   return jest.fn(() => {
     const mockDoc = new EventEmitter();
-    mockDoc.fontSize = jest.fn().mockReturnThis();
-    mockDoc.text = jest.fn().mockReturnThis();
+    mockDoc.addPage = jest.fn().mockReturnThis();
+    mockDoc.image = jest.fn().mockReturnThis();
     mockDoc.end = jest.fn(() => {
       mockDoc.emit("data", Buffer.from("fake-pdf-chunk"));
       mockDoc.emit("end");
@@ -77,9 +72,9 @@ const { EventEmitter } = require("events");
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
 function makeBusboyImpl({
-  filename = "test.txt",
-  mimeType = "text/plain",
-  body = "Hello",
+  filename = "photo.jpg",
+  mimeType = "image/jpeg",
+  body = "image-content",
   targetFormat = "pdf",
 } = {}) {
   return (bb) => {
@@ -117,7 +112,7 @@ describe("handler - validation", () => {
     mockBusboyImpl = (bb) => {
       bb.emit("field", "targetFormat", "pdf");
       const stream = new EventEmitter();
-      bb.emit("file", "file", stream, { filename: "empty.txt", mimeType: "text/plain" });
+      bb.emit("file", "file", stream, { filename: "empty.jpg", mimeType: "image/jpeg" });
       stream.emit("end");
       bb.emit("finish");
     };
@@ -126,23 +121,37 @@ describe("handler - validation", () => {
     expect(JSON.parse(result.body).error).toMatch(/No file provided/i);
   });
 
-  it("returns 400 when targetFormat is missing", async () => {
+  it("defaults missing targetFormat to pdf", async () => {
     mockBusboyImpl = (bb) => {
       const stream = new EventEmitter();
-      bb.emit("file", "file", stream, { filename: "test.txt", mimeType: "text/plain" });
+      bb.emit("file", "file", stream, { filename: "photo.jpg", mimeType: "image/jpeg" });
       stream.emit("data", Buffer.from("some content"));
       stream.emit("end");
       bb.emit("finish");
     };
     const result = await handler(apiGatewayEvent("--boundary--"));
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toMatch(/targetFormat/i);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).filename).toBe("photo.pdf");
+  });
+
+  it("returns 422 when targetFormat is not pdf", async () => {
+    mockBusboyImpl = makeBusboyImpl({ filename: "photo.jpg", targetFormat: "png" });
+    const result = await handler(apiGatewayEvent("--boundary--"));
+    expect(result.statusCode).toBe(422);
+    expect(JSON.parse(result.body).error).toMatch(/Only PDF output/i);
+  });
+
+  it("returns 422 for non-image input", async () => {
+    mockBusboyImpl = makeBusboyImpl({ filename: "notes.txt", mimeType: "text/plain", body: "hello" });
+    const result = await handler(apiGatewayEvent("--boundary--"));
+    expect(result.statusCode).toBe(422);
+    expect(JSON.parse(result.body).error).toMatch(/Only image files are supported/i);
   });
 });
 
-describe("handler - successful conversion (txt to pdf)", () => {
+describe("handler - successful conversion (image to pdf)", () => {
   beforeEach(() => {
-    mockBusboyImpl = makeBusboyImpl({ filename: "hello.txt", body: "Hello World", targetFormat: "pdf" });
+    mockBusboyImpl = makeBusboyImpl({ filename: "hello.jpg", body: "fake-image", targetFormat: "pdf" });
   });
 
   it("returns 200 with a downloadUrl", async () => {
@@ -152,62 +161,5 @@ describe("handler - successful conversion (txt to pdf)", () => {
     expect(body.downloadUrl).toBe("https://example.com/presigned");
     expect(body.filename).toBe("hello.pdf");
     expect(body.expiresIn).toBe(3600);
-  });
-});
-
-describe("handler - successful conversion (image to image)", () => {
-  beforeEach(() => {
-    mockBusboyImpl = (bb) => {
-      bb.emit("field", "targetFormat", "png");
-      const stream = new EventEmitter();
-      bb.emit("file", "file", stream, { filename: "photo.jpg", mimeType: "image/jpeg" });
-      stream.emit("data", Buffer.from("fake-jpeg-data"));
-      stream.emit("end");
-      bb.emit("finish");
-    };
-  });
-
-  it("returns 200 with png filename", async () => {
-    const result = await handler(apiGatewayEvent("--boundary--"));
-    expect(result.statusCode).toBe(200);
-    expect(JSON.parse(result.body).filename).toBe("photo.png");
-  });
-});
-
-describe("handler - successful conversion (pdf to txt)", () => {
-  beforeEach(() => {
-    mockBusboyImpl = (bb) => {
-      bb.emit("field", "targetFormat", "txt");
-      const stream = new EventEmitter();
-      bb.emit("file", "file", stream, { filename: "doc.pdf", mimeType: "application/pdf" });
-      stream.emit("data", Buffer.from("%PDF fake"));
-      stream.emit("end");
-      bb.emit("finish");
-    };
-  });
-
-  it("returns 200 with txt filename", async () => {
-    const result = await handler(apiGatewayEvent("--boundary--"));
-    expect(result.statusCode).toBe(200);
-    expect(JSON.parse(result.body).filename).toBe("doc.txt");
-  });
-});
-
-describe("handler - unsupported conversion", () => {
-  beforeEach(() => {
-    mockBusboyImpl = (bb) => {
-      bb.emit("field", "targetFormat", "docx");
-      const stream = new EventEmitter();
-      bb.emit("file", "file", stream, { filename: "image.jpg", mimeType: "image/jpeg" });
-      stream.emit("data", Buffer.from("fake-jpeg"));
-      stream.emit("end");
-      bb.emit("finish");
-    };
-  });
-
-  it("returns 422 for unsupported conversion pair", async () => {
-    const result = await handler(apiGatewayEvent("--boundary--"));
-    expect(result.statusCode).toBe(422);
-    expect(JSON.parse(result.body).error).toMatch(/not supported/i);
   });
 });

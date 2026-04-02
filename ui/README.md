@@ -9,16 +9,16 @@ Hosted on S3 + CloudFront, deployed by the SAM stack defined in `template.yaml`.
 |---|---|
 | `index.html` | Main page |
 | `styles.css` | Styles (including status/loading states) |
-| `app.js` | Form submission, calls `/convert` API, renders download link |
+| `app.js` | Validates image uploads, submits multipart request to `/convert` with PDF output, renders download link |
 | `config.js` | **Generated at deploy time** – injects `window.__CONFIG__.apiUrl` |
 
 ## Local development
 
-```bash
-# Option A – open directly in browser (no real API calls without config.js)
-open index.html
+```powershell
+# Open directly in browser (no real API calls without config.js)
+Start-Process index.html
 
-# Option B – simple static server
+# Simple static server
 npx serve .
 ```
 

@@ -53,11 +53,11 @@ API Gateway  ──►  Lambda (Node.js 20)
 ## Deploy
 
 ```bash
-# 1 – install backend dependencies
+# 1 – install backend dependencies for local development/testing
 cd backend && npm install && cd ..
 
-# 2 – build (SAM bundles the Lambda code)
-sam build
+# 2 – build inside a Linux container so sharp matches Lambda
+sam build --use-container
 
 # 3 – deploy (first time creates a guided setup)
 sam deploy --guided
@@ -94,6 +94,12 @@ aws cloudformation describe-stacks \
 cd backend
 npm install
 npm test
+
+# If you are building Lambda artifacts on Windows/macOS without Docker,
+# reinstall sharp for the Lambda target before packaging.
+# cd backend
+# Remove-Item -Recurse -Force node_modules
+# npm install --os=linux --cpu=x64 sharp
 
 # Preview the UI locally (no real conversions without an API URL)
 cd ui
